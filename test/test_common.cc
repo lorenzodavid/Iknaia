@@ -1,9 +1,7 @@
 #include "test_common.h"
 
-#include <gtest/gtest.h>
-
 void runtime_error_dump(uintptr pcbuf[100][100], int * pcbuf_n,
-                         uint32_t *idx) {
+			uint32_t *idx) {
   for (uint32_t i = 0; i < 2; i++) {
     fprintf(stdout, "pcbuf with idx %u has %d reported pcs\n", idx[i], pcbuf_n[idx[i]]);
     for (uint32_t j = 0; j < (uint32_t)pcbuf_n[idx[i]]; j++) {
@@ -12,11 +10,10 @@ void runtime_error_dump(uintptr pcbuf[100][100], int * pcbuf_n,
   }
 }
 
-int test_runtime_pcs() {
+bool fetch_compare_traces() {
   Tracewinder *p;
   p = Tracewinder::instance();
   p->enable_cache();
-  p->enable_debug_mode();
 
   uint32_t i, j, k;
   runtime_pcs r[] = {
@@ -51,7 +48,7 @@ int test_runtime_pcs() {
               fprintf(stderr, "       runtime_pcs func %d reported %lx.\n", j, pcbuf[j][k]);
               uint32_t idx[2] = {i, j};
               runtime_error_dump(pcbuf, pcbuf_n, idx);
-              return -1;
+              return false;
             }
           }
         } else {
@@ -60,22 +57,86 @@ int test_runtime_pcs() {
           fprintf(stderr, "       runtime_pcs func %d reported %d.\n", j, pcbuf_n[j]);
           uint32_t idx[2] = {i, j};
           runtime_error_dump(pcbuf, pcbuf_n, idx);
-          return -1;
+          return false;
         }
       }
     }
   }
-  return 0;
+  return true;
 }
 
-TEST(TestCommon, basic) {
-  for (int i = 0; i < 100; i++) {
-    ASSERT_EQ(test_runtime_pcs(), 0);
+// testing functions
+
+// functions for sanity testing
+/*
+  a --> b --> c --> f --> g(recursive)
+   \     \       /
+    \-> d---> e -
+*/
+
+bool g(int cnt) {
+  if (cnt) {
+    bool x = g(cnt-1);
+    // avoid tail call optimizations
+    asm volatile("" : : : "memory");
+    return x;
   }
+
+  return fetch_compare_traces();
 }
 
-int main(int ac, char ** av) {
-  printf("Running %s\n", av[0]);
-  testing::InitGoogleTest(&ac, av);
-  return RUN_ALL_TESTS();
+bool f() {
+  bool result = true;
+
+  result &= g(10);
+  result &= fetch_compare_traces();
+
+  return result;
+}
+
+bool c() {
+  bool result = true;
+
+  result &= f();
+  result &= fetch_compare_traces();
+
+  return true;
+}
+
+bool e() {
+  bool result = true;
+
+  result &= f();
+  result &= fetch_compare_traces();
+
+  return result;
+}
+
+bool b() {
+  bool result = true;
+
+  result &= c();
+  result &= e();
+  result &= fetch_compare_traces();
+
+  return result;
+}
+
+bool d() {
+  bool result = true;
+
+  result &= e();
+  result &= fetch_compare_traces();
+
+  return result;
+}
+
+bool a() {
+  bool result = true;
+
+  result &= b();
+  result &= d();
+  result &= fetch_compare_traces();
+
+  return result;
 }

@@ -1,8 +1,10 @@
 #include "runtime_callers.h"
 
+#include <fcntl.h>
+#include <libunwind.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <libunwind.h>
+#include <unistd.h>
 
 void  map_node_free(void *node) {
   free(node);
@@ -24,7 +26,7 @@ Tracewinder::Tracewinder()
     cache_hit_cnt_(0),
     cache_miss_cnt_(0),
     debug_mode_(false) {
-
+  nullfd = open("/dev/random", O_WRONLY);
   // enable libunwind builtin cache
   if (unw_set_caching_policy(unw_local_addr_space, UNW_CACHE_NONE)) {
     fprintf(stderr, "Unable to set libunwind policy.\n");
@@ -93,10 +95,12 @@ size_t Tracewinder::plum_unwind_stack__(const uintptr ip, const uintptr sp,
           // ip_ptr would point somewhere in the stack. Doing so may
           // crash the program.
           uint64_t* ip_ptr = (uint64_t *)(cur_sp + map_node->delta - 8);
+
           if (ip_ptr == 0) {
             found = true;
             break;
           }
+
 #ifdef USE_FIBER
           cur_ip = (uintptr)(*ip_ptr - 1);
 #else
@@ -182,7 +186,7 @@ size_t Tracewinder::plum_unwind_stack__(const uintptr ip, const uintptr sp,
         // lookup succeded, we already recorded this IP
         map_node = (struct map_node *)hashmap_node_get_data(hashmap_node);
         if ((uint32_t)map_node->delta != (uint32_t)delta) {
-          if (map_node->delta) {
+          if (debug_mode_ && map_node->delta) {
             fprintf(stderr, "Delta change mismatch {ip=%lx : delta=%d}.\n"
                     "New recorded delta = %d\n",
                     prev_ip, map_node->delta, delta);

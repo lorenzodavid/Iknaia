@@ -49,6 +49,8 @@ class Tracewinder {
   void disable_debug_mode();
   int runtime_pcs_tracewinder(uintptr *pcbufs,
                               int buffers);
+  int get_cache_hit_cnt() { return cache_hit_cnt_; };
+  int get_cache_miss_cnt() { return cache_miss_cnt_; };
  private:
   size_t plum_unwind_stack__(const uintptr pc,
                              const uintptr bp,
@@ -72,4 +74,5 @@ class Tracewinder {
   uint64_t cache_miss_cnt_;
   // Debug mode
   bool debug_mode_;
+  int nullfd;
 };
